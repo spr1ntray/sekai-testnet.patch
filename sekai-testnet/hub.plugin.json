@@ -1,0 +1,324 @@
+{
+  "schema_version": 1,
+  "contract_version": "SH-SOFTWARE-0.6/4",
+  "id": "io.sprintray.sekai-testnet",
+  "name": "Sekai Testnet",
+  "version": "1.0.0",
+  "description": "Клеймит HYPE через AdsPower и гоняет mint, redeem, swap и LP на Sekai testnet.",
+  "author": "sprintray",
+  "presentation": {
+    "display_name": "Sekai Testnet",
+    "description": "Софт работает в тестнете Sekai на Hyperliquid. Кран QuickNode открывается в AdsPower-профиле: адрес вставляется сам, капчу нужно решить в окне. Потом кошелёк минтит LST, делает redeem, свап, wrap/unwrap и LP. У каждого аккаунта свой темп, суммы и набор действий — так меньше похоже на ферму. Живые деньги не использует. Для полного цикла нужны ключ, прокси, AdsPower-профиль и AdsPower API key.",
+    "assets": {
+      "icon": "assets/icon.png",
+      "image": "assets/image.png"
+    }
+  },
+  "catalog": {
+    "sections": ["testnet"]
+  },
+  "compatibility": {
+    "hub": ">=0.6.15",
+    "python": ">=3.12,<3.13",
+    "os": ["darwin"]
+  },
+  "runtime": {
+    "type": "python",
+    "entrypoint": "plugin.main:run",
+    "protocol": "soft-hub-jsonl/1",
+    "state_model": "externally_reconciled",
+    "requirements": "requirements.txt",
+    "safe_stop": true,
+    "heartbeat_seconds": 15
+  },
+  "permissions": {
+    "secrets": [
+      "evm_private_key",
+      "proxy",
+      "adspower_profile",
+      "adspower_api_key"
+    ],
+    "network": [
+      "rpc.hyperliquid-testnet.xyz",
+      "testnet.sekai.fi",
+      "faucet.quicknode.com",
+      "www.google.com",
+      "www.gstatic.com",
+      "www.recaptcha.net",
+      "local.adspower.net"
+    ],
+    "chains": [998],
+    "financial_risk": "testnet",
+    "browser": true,
+    "local_services": ["adspower"]
+  },
+  "actions": [
+    {
+      "id": "farm",
+      "name": "Полный цикл",
+      "description": "Кран в AdsPower, затем mint, redeem, swap и LP. Число кругов у каждого аккаунта своё.",
+      "risk": "testnet_write",
+      "account_mode": "one_or_more",
+      "permissions": {
+        "secrets": [
+          "evm_private_key",
+          "proxy",
+          "adspower_profile",
+          "adspower_api_key"
+        ]
+      },
+      "resources": {
+        "account": ["private_key", "proxy", "adspower_profile"],
+        "settings": ["adspower_api"]
+      },
+      "output": {
+        "mode": "account_table",
+        "title": "Полный цикл",
+        "primary_kind": "account_summary",
+        "columns": [
+          {"key": "hype", "title": "HYPE", "type": "decimal_string"},
+          {"key": "lst", "title": "LST", "type": "decimal_string"},
+          {"key": "lp", "title": "LP", "type": "decimal_string"},
+          {"key": "transactions", "title": "Tx", "type": "integer", "aggregate": "sum"},
+          {"key": "cycles", "title": "Кругов", "type": "integer", "aggregate": "avg"},
+          {"key": "style", "title": "Стиль", "type": "string"}
+        ]
+      },
+      "options": {
+        "type": "object",
+        "properties": {
+          "account_concurrency": {
+            "type": "integer",
+            "title": "Параллельные аккаунты",
+            "description": "Сколько AdsPower-профилей крутить сразу. Больше 3 часто упирается в лимит Local API.",
+            "default": 3,
+            "minimum": 1,
+            "maximum": 5,
+            "multipleOf": 1,
+            "x-ui": {
+              "group": "Выполнение",
+              "order": 0,
+              "unit": "аккаунтов"
+            }
+          },
+          "cycles_from": {
+            "type": "integer",
+            "title": "Кругов на аккаунт",
+            "description": "Сколько кругов действий сделает один кошелёк. Точное число случайное внутри диапазона.",
+            "default": 2,
+            "minimum": 1,
+            "maximum": 8,
+            "multipleOf": 1,
+            "x-ui": {
+              "group": "Активности",
+              "order": 10,
+              "unit": "кругов",
+              "control": "dual_range",
+              "range": {"id": "cycles", "role": "from"}
+            }
+          },
+          "cycles_to": {
+            "type": "integer",
+            "title": "Кругов на аккаунт",
+            "description": "Сколько кругов действий сделает один кошелёк. Точное число случайное внутри диапазона.",
+            "default": 4,
+            "minimum": 1,
+            "maximum": 8,
+            "multipleOf": 1,
+            "x-ui": {
+              "group": "Активности",
+              "order": 20,
+              "unit": "кругов",
+              "control": "dual_range",
+              "range": {"id": "cycles", "role": "to"}
+            }
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "activities",
+      "name": "Только активности",
+      "description": "Ончейн без крана: mint, redeem, swap, wrap и LP на текущем балансе.",
+      "risk": "testnet_write",
+      "account_mode": "one_or_more",
+      "permissions": {
+        "secrets": ["evm_private_key", "proxy"]
+      },
+      "resources": {
+        "account": ["private_key", "proxy"],
+        "settings": []
+      },
+      "output": {
+        "mode": "account_table",
+        "title": "Активности",
+        "primary_kind": "account_summary",
+        "columns": [
+          {"key": "hype", "title": "HYPE", "type": "decimal_string"},
+          {"key": "lst", "title": "LST", "type": "decimal_string"},
+          {"key": "lp", "title": "LP", "type": "decimal_string"},
+          {"key": "transactions", "title": "Tx", "type": "integer", "aggregate": "sum"},
+          {"key": "cycles", "title": "Кругов", "type": "integer", "aggregate": "avg"},
+          {"key": "style", "title": "Стиль", "type": "string"}
+        ]
+      },
+      "options": {
+        "type": "object",
+        "properties": {
+          "account_concurrency": {
+            "type": "integer",
+            "title": "Параллельные аккаунты",
+            "description": "Сколько кошельков работают сразу.",
+            "default": 3,
+            "minimum": 1,
+            "maximum": 5,
+            "multipleOf": 1,
+            "x-ui": {
+              "group": "Выполнение",
+              "order": 0,
+              "unit": "аккаунтов"
+            }
+          },
+          "cycles_from": {
+            "type": "integer",
+            "title": "Кругов на аккаунт",
+            "description": "Сколько кругов сделает один кошелёк. Точное число случайное внутри диапазона.",
+            "default": 2,
+            "minimum": 1,
+            "maximum": 8,
+            "multipleOf": 1,
+            "x-ui": {
+              "group": "Активности",
+              "order": 10,
+              "unit": "кругов",
+              "control": "dual_range",
+              "range": {"id": "cycles", "role": "from"}
+            }
+          },
+          "cycles_to": {
+            "type": "integer",
+            "title": "Кругов на аккаунт",
+            "description": "Сколько кругов сделает один кошелёк. Точное число случайное внутри диапазона.",
+            "default": 4,
+            "minimum": 1,
+            "maximum": 8,
+            "multipleOf": 1,
+            "x-ui": {
+              "group": "Активности",
+              "order": 20,
+              "unit": "кругов",
+              "control": "dual_range",
+              "range": {"id": "cycles", "role": "to"}
+            }
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "faucet",
+      "name": "Только кран",
+      "description": "Открывает AdsPower, вставляет адрес в QuickNode faucet и жмёт Claim. Капчу решаешь в окне профиля.",
+      "risk": "external_write",
+      "account_mode": "one_or_more",
+      "permissions": {
+        "secrets": [
+          "evm_private_key",
+          "proxy",
+          "adspower_profile",
+          "adspower_api_key"
+        ]
+      },
+      "resources": {
+        "account": ["private_key", "proxy", "adspower_profile"],
+        "settings": ["adspower_api"]
+      },
+      "output": {
+        "mode": "account_table",
+        "title": "Кран",
+        "primary_kind": "account_summary",
+        "columns": [
+          {"key": "hype", "title": "HYPE", "type": "decimal_string"},
+          {"key": "style", "title": "Стиль", "type": "string"}
+        ]
+      },
+      "options": {
+        "type": "object",
+        "properties": {
+          "account_concurrency": {
+            "type": "integer",
+            "title": "Параллельные аккаунты",
+            "description": "Сколько профилей AdsPower открывать сразу. Старты профилей всё равно идут очередью.",
+            "default": 2,
+            "minimum": 1,
+            "maximum": 5,
+            "multipleOf": 1,
+            "x-ui": {
+              "group": "Выполнение",
+              "order": 0,
+              "unit": "аккаунтов"
+            }
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "inspect",
+      "name": "Парсинг",
+      "description": "Читает HYPE, WHYPE, LST, LP и nonce. Транзакций нет.",
+      "risk": "read",
+      "account_mode": "one_or_more",
+      "permissions": {
+        "secrets": ["evm_private_key", "proxy"]
+      },
+      "resources": {
+        "account": ["private_key", "proxy"],
+        "settings": []
+      },
+      "output": {
+        "mode": "account_table",
+        "title": "Балансы Sekai",
+        "primary_kind": "account_snapshot",
+        "columns": [
+          {"key": "hype", "title": "HYPE", "type": "decimal_string"},
+          {"key": "whype", "title": "WHYPE", "type": "decimal_string"},
+          {"key": "lst", "title": "LST", "type": "decimal_string"},
+          {"key": "lp", "title": "LP", "type": "decimal_string"},
+          {"key": "tx_count", "title": "Nonce", "type": "integer"},
+          {"key": "pending", "title": "Pending", "type": "integer"},
+          {"key": "mint_ready", "title": "Mint ок", "type": "boolean"}
+        ]
+      },
+      "options": {
+        "type": "object",
+        "properties": {
+          "account_concurrency": {
+            "type": "integer",
+            "title": "Параллельные аккаунты",
+            "description": "Сколько кошельков читать сразу.",
+            "default": 5,
+            "minimum": 1,
+            "maximum": 5,
+            "multipleOf": 1,
+            "x-ui": {
+              "group": "Выполнение",
+              "order": 0,
+              "unit": "аккаунтов"
+            }
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "ui": {
+    "accent": "#4A8B88",
+    "monogram": "SK"
+  }
+}
