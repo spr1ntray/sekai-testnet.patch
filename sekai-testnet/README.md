@@ -18,5 +18,5 @@
 Из корня Soft Hub:
 
 ```bash
-python3 scripts/build_plugin.py ../sekai_testnet/sekai-testnet dist/sekai-testnet-1.0.0.softhub.zip
+python3 scripts/build_plugin.py /Users/sprintray/grok_soft/sekai_testnet/sekai-testnet /Users/sprintray/grok_soft/sekai_testnet/dist/sekai-testnet-1.1.0.softhub.zip
 ```

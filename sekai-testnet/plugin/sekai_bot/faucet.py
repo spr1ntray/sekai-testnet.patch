@@ -36,7 +36,6 @@ def claim_hype(
     target_wei: int,
 ) -> int:
     start = client.native_balance()
-    session = ads.start_or_attach(profile_id)
     try:
         from playwright.sync_api import sync_playwright
     except ImportError as exc:
@@ -44,65 +43,70 @@ def claim_hype(
 
     last = start
     try:
+        session = ads.start_or_attach(profile_id)
         with sync_playwright() as playwright:
             cancel()
             browser = playwright.chromium.connect_over_cdp(session.ws_url, timeout=20_000)
-            context = browser.contexts[0] if browser.contexts else browser.new_context()
-            page = context.pages[0] if context.pages else context.new_page()
-            page.goto(FAUCET_URL, wait_until="domcontentloaded", timeout=20_000)
-            page.bring_to_front()
-            filled = False
-            for selector in ADDRESS_SELECTORS:
-                try:
-                    locator = page.locator(selector).first
-                    locator.wait_for(state="visible", timeout=8_000)
-                    locator.fill(client.address, timeout=8_000)
-                    filled = True
-                    break
-                except Exception:
-                    continue
-            if not filled:
-                raise RuntimeError("Не нашёл поле адреса на странице крана")
-            log("Адрес вставлен в кран")
-            time.sleep(personality.rng.uniform(0.4, 1.2))
-            attempts = personality.rng.randint(2, 5)
-            for attempt in range(1, attempts + 1):
-                cancel()
-                _click_claim(page)
-                log(f"Нажал Claim ({attempt}/{attempts}). Если есть капча — реши в окне профиля")
-                human = personality.rng.uniform(4.0, 9.0)
-                interrupt = max(2.0, human)
-                end = time.monotonic() + interrupt
-                while time.monotonic() < end:
-                    cancel()
-                    time.sleep(0.4)
-                _click_claim(page)
-                last = client.native_balance()
-                log(f"Баланс после попытки {attempt}: {from_wei(last)} HYPE")
-                if target_wei > 0 and last >= target_wei:
-                    break
-                if last > start and last >= start + (15 * 10**15):
-                    break
-                if attempt < attempts:
-                    try:
-                        page.reload(wait_until="domcontentloaded", timeout=15_000)
-                        for selector in ADDRESS_SELECTORS:
-                            try:
-                                locator = page.locator(selector).first
-                                locator.wait_for(state="visible", timeout=4_000)
-                                locator.fill(client.address, timeout=4_000)
-                                break
-                            except Exception:
-                                continue
-                    except Exception:
-                        pass
-                    personality.sleep_action(cancel)
             try:
-                page.close()
-            except Exception:
-                pass
+                context = browser.contexts[0] if browser.contexts else browser.new_context()
+                page = context.pages[0] if context.pages else context.new_page()
+                page.goto(FAUCET_URL, wait_until="domcontentloaded", timeout=20_000)
+                page.bring_to_front()
+                filled = False
+                for selector in ADDRESS_SELECTORS:
+                    try:
+                        locator = page.locator(selector).first
+                        locator.wait_for(state="visible", timeout=8_000)
+                        locator.fill(client.address, timeout=8_000)
+                        filled = True
+                        break
+                    except Exception:
+                        continue
+                if not filled:
+                    raise RuntimeError("Не нашёл поле адреса на странице крана")
+                log("Адрес вставлен в кран")
+                time.sleep(personality.rng.uniform(0.4, 1.2))
+                attempts = personality.rng.randint(2, 4)
+                for attempt in range(1, attempts + 1):
+                    cancel()
+                    _click_claim(page)
+                    log(f"Нажал Claim ({attempt}/{attempts}). Если есть капча — реши в окне профиля")
+                    end = time.monotonic() + personality.rng.uniform(4.0, 8.0)
+                    while time.monotonic() < end:
+                        cancel()
+                        time.sleep(0.4)
+                    _click_claim(page)
+                    last = client.native_balance()
+                    log(f"Баланс после попытки {attempt}: {from_wei(last)} HYPE")
+                    if target_wei > 0 and last >= target_wei:
+                        break
+                    if last > start and last >= start + (15 * 10**15):
+                        break
+                    if attempt < attempts:
+                        try:
+                            page.reload(wait_until="domcontentloaded", timeout=15_000)
+                            for selector in ADDRESS_SELECTORS:
+                                try:
+                                    locator = page.locator(selector).first
+                                    locator.wait_for(state="visible", timeout=4_000)
+                                    locator.fill(client.address, timeout=4_000)
+                                    break
+                                except Exception:
+                                    continue
+                        except Exception:
+                            pass
+                        personality.sleep_action(cancel)
+                try:
+                    page.close()
+                except Exception:
+                    pass
+            finally:
+                try:
+                    browser.close()
+                except Exception:
+                    pass
     finally:
-        ads.stop_if_started(profile_id, session.started_by_us)
+        ads.stop(profile_id)
     return client.native_balance()
 
 

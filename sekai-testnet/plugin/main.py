@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 import sys
 import threading
 from typing import Any
@@ -14,7 +15,14 @@ from plugin.sekai_bot.faucet import claim_hype
 from plugin.sekai_bot.onchain import run_cycles
 from plugin.sekai_bot.parse import snapshot
 from plugin.sekai_bot.personality import roll_personality
-from plugin.sekai_bot.utils import from_wei, normalize_private_key, normalize_proxy, safe_error, to_wei
+from plugin.sekai_bot.utils import (
+    from_wei,
+    interruptible_sleep,
+    normalize_private_key,
+    normalize_proxy,
+    safe_error,
+    to_wei,
+)
 
 SUPPORTED_OS = frozenset({"darwin"})
 WRITE_ACTIONS = frozenset({"farm", "activities"})
@@ -71,7 +79,20 @@ def run(context: HubContext) -> dict[str, Any]:
             counters[status] = counters.get(status, 0) + 1
         return status
 
-    context.map_accounts(worker)
+    queue = [account for account in context.accounts if account.id not in blocked]
+    random.shuffle(queue)
+    batch_size = max(1, int(context.account_concurrency))
+    total_batches = (len(queue) + batch_size - 1) // batch_size if queue else 0
+    for batch_index in range(0, len(queue), batch_size):
+        context.check_cancelled()
+        batch = tuple(queue[batch_index : batch_index + batch_size])
+        number = batch_index // batch_size + 1
+        labels = ", ".join(account.label for account in batch)
+        context.log(
+            f"Пачка {number}/{total_batches}: {len(batch)} аккаунтов — {labels}",
+            data={"batch": number, "size": len(batch)},
+        )
+        context.map_accounts(worker, accounts=batch)
     return {
         "total": counters["total"],
         "succeeded": counters["succeeded"],
@@ -114,7 +135,7 @@ def _run_account(context: HubContext, hub: HubAccount, options: RunOptions) -> s
         account_id=hub.id,
         data=personality.public(),
     )
-    personality.sleep_start(context.check_cancelled)
+    interruptible_sleep(random.uniform(0.2, 1.4), context.check_cancelled)
 
     if context.action_id == "inspect":
         context.account_state(hub.id, status="running", stage="inspect", progress=0.45, message="Читаю балансы")
@@ -131,8 +152,8 @@ def _run_account(context: HubContext, hub: HubAccount, options: RunOptions) -> s
         _protect(context, profile_id)
         _protect(context, api_key)
         ads = AdsPowerClient(api_key)
+        opened = False
         try:
-            ads.require_profile(profile_id)
             bal = claim_hype(
                 client=client,
                 ads=ads,
@@ -142,6 +163,7 @@ def _run_account(context: HubContext, hub: HubAccount, options: RunOptions) -> s
                 cancel=context.check_cancelled,
                 target_wei=to_wei("0.08"),
             )
+            opened = True
             context.log(f"После крана: {from_wei(bal)} HYPE", account_id=hub.id)
         except AdsPowerError as exc:
             context.log(str(exc), level="warning", account_id=hub.id)
@@ -149,7 +171,13 @@ def _run_account(context: HubContext, hub: HubAccount, options: RunOptions) -> s
             context.log(f"Кран не удался: {safe_error(exc)}", level="warning", account_id=hub.id)
         finally:
             ads.close()
-        context.account_state(hub.id, status="running", stage="funded", progress=0.28, message="Кран отработал")
+        context.account_state(
+            hub.id,
+            status="running",
+            stage="funded" if opened else "faucet_failed",
+            progress=0.28,
+            message="Профиль открыт, кран отработал" if opened else "Профиль AdsPower не открылся",
+        )
 
     if context.action_id == "faucet":
         data = snapshot(client)
@@ -241,7 +269,7 @@ def _preflight_adspower(context: HubContext) -> set[str]:
             _terminal(context, account, "blocked", "missing_adspower", "Нет AdsPower профиля")
             blocked.add(account.id)
             continue
-        if len((profile or "").strip()) < 4:
+        if not (profile or "").strip():
             _terminal(context, account, "blocked", "missing_adspower", "Пустой AdsPower профиль")
             blocked.add(account.id)
             continue

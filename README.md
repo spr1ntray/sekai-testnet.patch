@@ -1,10 +1,10 @@
-# Sekai Testnet (Soft Hub)
+# Sekai Testnet
 
-Пакет для Soft Hub: кран AdsPower + mint/redeem/swap/LP на Sekai / Hyperliquid testnet.
+Soft Hub package for Sekai / Hyperliquid testnet.
 
-Установка: Soft Hub → Патчи → GitHub `spr1ntray/sekai-testnet.patch` либо локальный `dist/sekai-testnet-1.0.0.softhub.zip`.
+Install from `dist/sekai-testnet-1.1.0.softhub.zip` or the GitHub release.
 
-SHA-256 `sekai-testnet-1.0.0.softhub.zip`:
+SHA-256:
 ```
-ac21a060d1a6b642b24bf3c5211d55fb71e6fea26c29bbaf0f613f83415eb8d7
+f9e1651b58bef353069f21e7099c7d16ab55fde3c3bf1ab6605e08c7717fff71
 ```

@@ -2,3 +2,8 @@ __pycache__/
 *.pyc
 .DS_Store
 .venv/
+venv/
+logs/
+*.log
+input/database.enc
+input/database.salt
